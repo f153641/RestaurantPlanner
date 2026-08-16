@@ -30,7 +30,7 @@
 
     <!-- 兼具 新增 / 僅檢視 / 編輯 功能的彈窗 -->
     <AddRestaurantModal
-      v-if="isModalOpen"
+      v-model="isModalOpen"
       :available-tags="availableTags"
       :initial-data="currentRestaurant"
       :is-view-only="isViewOnly"
