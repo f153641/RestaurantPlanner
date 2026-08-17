@@ -243,4 +243,14 @@ const formattedRating = computed(() => {
 .delete-btn:hover {
   color: #ff4757; /* 懸停時變紅 */
 }
+
+.restaurant-rating {
+  width: 25%; /* 固定寬度百分比 */
+  min-width: 80px; /* 設定最小寬度，防止容器縮太小 */
+  white-space: nowrap; /* 強制文字不換行 */
+  display: flex;
+  align-items: center;
+  justify-content: flex-end; /* 讓星星與評分靠右對齊 */
+  flex-shrink: 0; /* 避免被左側店名壓縮 */
+}
 </style>
