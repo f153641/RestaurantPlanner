@@ -8,10 +8,15 @@
       <button class="add-btn" @click="openAddModal">➕ 新增餐廳</button>
     </div>
 
+    <!-- 🌟 傳遞標籤與地區雙向綁定的狀態 -->
     <FilterBar
+      v-model:search-query="searchQuery"
       :available-tags="availableTags"
       v-model:selected-tags="selectedTags"
-      v-model:only-reservable="onlyReservable"
+      v-model:selected-city-code="selectedCityCode"
+      v-model:selected-districts="selectedDistricts"
+      @city-change="handleCityNameChange"
+      layout="horizontal"
     />
 
     <div class="cards-grid" v-if="filteredRestaurants.length > 0">
@@ -25,7 +30,7 @@
     </div>
 
     <div class="empty-state" v-else>
-      <p>🔍 沒有符合篩選條件的餐廳，試試看取消某些標籤吧！</p>
+      <p>🔍 沒有符合篩選條件的餐廳，試試看取消某些條件吧！</p>
     </div>
 
     <!-- 兼具 新增 / 僅檢視 / 編輯 功能的彈窗 -->
@@ -48,7 +53,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
-// 引入 Firebase 資料庫與官方語法 (新增 updateDoc)
+// 引入 Firebase 資料庫與官方語法
 import { db } from "@/firebase";
 import {
   collection,
@@ -70,30 +75,33 @@ const isModalOpen = ref(false);
 const isViewOnly = ref(false);
 const currentRestaurant = ref(null);
 
-// 篩選條件的狀態
+// 標籤篩選條件
 const selectedTags = ref([]);
 const onlyReservable = ref(false);
 
-// 🌟 1. 固定不可刪除的預設時段
-const DEFAULT_PERIODS = ["早餐", "午餐", "晚餐", "下午茶/點心", "宵夜"];
+// 🌟 地區篩選條件
+const selectedCityCode = ref("");
+const selectedCityName = ref("");
+const selectedDistricts = ref([]);
 
-// 🌟 2. 用來裝雲端自訂標籤的陣列
+// 預設時段與雲端標籤
+const DEFAULT_PERIODS = ["早餐", "午餐", "晚餐", "下午茶/點心", "宵夜"];
 const firebaseCustomTags = ref([]);
 
-// 🌟 3. 自動融合成同一個標籤陣列給子組件使用
+// 自動融合成可用的標籤清單
 const availableTags = computed(() => {
   return [...DEFAULT_PERIODS, ...firebaseCustomTags.value.map((t) => t.name)];
 });
 
-// 🛒 核心餐廳陣列
+// 核心餐廳陣列
 const restaurants = ref([]);
 
-// 📡 用來註冊 Firebase 退訂監聽的變數
+// Firebase 監聽器註冊變數
 let unsubscribeRestaurants = null;
 let unsubscribeTags = null;
 
 onMounted(() => {
-  // 📡 監聽餐廳資料
+  // 📡 1. 監聽餐廳資料
   const qRestaurants = query(collection(db, "restaurants"));
   unsubscribeRestaurants = onSnapshot(qRestaurants, (querySnapshot) => {
     const tempShops = [];
@@ -105,7 +113,7 @@ onMounted(() => {
     console.log("📡 Firebase 原始餐廳資料:", JSON.parse(JSON.stringify(tempShops)));
   });
 
-  // 📡 監聽自訂標籤資料
+  // 📡 2. 監聽自訂標籤資料
   const qTags = query(collection(db, "customTags"));
   unsubscribeTags = onSnapshot(qTags, (querySnapshot) => {
     const tempTags = [];
@@ -113,56 +121,96 @@ onMounted(() => {
       tempTags.push({
         id: doc.id,
         name: doc.data().name,
-        id: doc.id,
       });
     });
     firebaseCustomTags.value = tempTags;
   });
 });
 
-// 當頁面關閉時，切斷與 Firebase 的連線
+// 組件銷毀時卸載 Firebase 監聽
 onUnmounted(() => {
   if (unsubscribeRestaurants) unsubscribeRestaurants();
   if (unsubscribeTags) unsubscribeTags();
 });
 
-// 🔥 核心篩選邏輯（自動計算）
+// 接收縣市名稱切換事件
+const handleCityNameChange = (cityName) => {
+  selectedCityName.value = cityName;
+};
+
+// 關鍵字搜尋狀態
+const searchQuery = ref("");
+
+// 多條件過濾邏輯（關鍵字 + 標籤 + 可預約 + 縣市/行政區）
 const filteredRestaurants = computed(() => {
   return restaurants.value.filter((shop) => {
+    // 1. 關鍵字比對 (名稱、地址、備註說明)
+    const query = searchQuery.value.trim().toLowerCase();
+    const matchSearch =
+      !query ||
+      (shop.name && shop.name.toLowerCase().includes(query)) ||
+      (shop.address && shop.address.toLowerCase().includes(query)) ||
+      (shop.notes && shop.notes.toLowerCase().includes(query));
+
+    // 2. 標籤篩選
     const matchTags =
       selectedTags.value.length === 0 ||
       selectedTags.value.some((t) => shop.tags && shop.tags.includes(t));
+
+    // 3. 可預約過濾
     const matchReserve = !onlyReservable.value || shop.canReserve;
-    return matchTags && matchReserve;
+
+    // 4. 地區比對 (縣市 + 行政區)
+    const address = shop.address || "";
+    let matchLocation = true;
+
+    if (selectedCityName.value) {
+      const matchCity = address.includes(selectedCityName.value);
+      if (!matchCity) {
+        matchLocation = false;
+      } else if (selectedDistricts.value.length > 0) {
+        const matchDistrict = selectedDistricts.value.some((dist) =>
+          address.includes(dist)
+        );
+        if (!matchDistrict) matchLocation = false;
+      }
+    }
+
+    return matchSearch && matchTags && matchReserve && matchLocation;
   });
 });
 
-// 🔍 打開僅檢視彈窗 (點擊卡片觸發)
+// 打開檢視彈窗
 const openViewModal = (restaurant) => {
   currentRestaurant.value = { ...restaurant };
   isViewOnly.value = true;
   isModalOpen.value = true;
 };
 
-// ➕ 打開新增餐廳彈窗
+// 打開新增彈窗
 const openAddModal = () => {
   currentRestaurant.value = null;
   isViewOnly.value = false;
   isModalOpen.value = true;
 };
 
-// ❌ 關閉彈窗並重置狀態
+// 切換至編輯狀態
+const handleEdit = () => {
+  isViewOnly.value = false;
+};
+
+// 關閉彈窗
 const closeModal = () => {
   isModalOpen.value = false;
   currentRestaurant.value = null;
   isViewOnly.value = false;
 };
 
-// ➕ 功能：將新餐廳推送到雲端資料庫
+// 新增餐廳到雲端
 const addRestaurant = async (newShop) => {
   try {
     const shopData = { ...newShop };
-    delete shopData.id; // 🌟 移除前端預設的 id 欄位，交給 Firebase 自動生成
+    delete shopData.id;
     await addDoc(collection(db, "restaurants"), shopData);
     closeModal();
   } catch (error) {
@@ -171,13 +219,12 @@ const addRestaurant = async (newShop) => {
   }
 };
 
-// ✏️ 功能：更新雲端資料庫的餐廳資料
+// 更新餐廳至雲端
 const updateRestaurant = async (updatedShop) => {
   if (!updatedShop.id) return;
 
   try {
     const shopRef = doc(db, "restaurants", updatedShop.id);
-    // 複製一份資料並排除不可寫入文件的 id 欄位
     const updateData = { ...updatedShop };
     delete updateData.id;
 
@@ -189,9 +236,8 @@ const updateRestaurant = async (updatedShop) => {
   }
 };
 
-// 🗑️ 功能：從雲端資料庫刪除餐廳
+// 刪除餐廳
 const deleteRestaurant = async (id) => {
-  // 🌟 補上防呆：如果 id 為空，直接擋掉並印出警示
   if (!id) {
     console.warn("無法刪除：找不到餐廳 ID", id);
     return;
@@ -206,7 +252,7 @@ const deleteRestaurant = async (id) => {
   }
 };
 
-// 🌟 4. 新增自訂標籤
+// 新增自訂標籤
 const addNewTag = async (tagName) => {
   const isExist = availableTags.value.includes(tagName);
   if (isExist) return;
@@ -218,7 +264,7 @@ const addNewTag = async (tagName) => {
   }
 };
 
-// 🗑️ 5. 從 Firebase 雲端刪除該自訂標籤
+// 刪除自訂標籤
 const deleteTag = async (tagName) => {
   const targetTag = firebaseCustomTags.value.find((t) => t.name === tagName);
   if (targetTag) {
@@ -280,7 +326,6 @@ const deleteTag = async (tagName) => {
   margin-top: 25px;
 }
 
-/* 確保卡片可點擊 */
 .cards-grid :deep(.restaurant-card) {
   cursor: pointer;
 }
