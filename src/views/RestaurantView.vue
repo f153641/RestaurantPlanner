@@ -141,10 +141,11 @@ const handleCityNameChange = (cityName) => {
 // 關鍵字搜尋狀態
 const searchQuery = ref("");
 
-// 多條件過濾邏輯（關鍵字 + 標籤 + 可預約 + 縣市/行政區）
+const WEEKDAYS = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"];
+
 const filteredRestaurants = computed(() => {
   return restaurants.value.filter((shop) => {
-    // 1. 關鍵字比對 (名稱、地址、備註說明)
+    // 1. 關鍵字比對
     const query = searchQuery.value.trim().toLowerCase();
     const matchSearch =
       !query ||
@@ -152,31 +153,47 @@ const filteredRestaurants = computed(() => {
       (shop.address && shop.address.toLowerCase().includes(query)) ||
       (shop.notes && shop.notes.toLowerCase().includes(query));
 
-    // 2. 標籤篩選
-    const matchTags =
-      selectedTags.value.length === 0 ||
-      selectedTags.value.some((t) => shop.tags && shop.tags.includes(t));
+    if (!matchSearch) return false;
 
-    // 3. 可預約過濾
-    const matchReserve = !onlyReservable.value || shop.canReserve;
-
-    // 4. 地區比對 (縣市 + 行政區)
+    // 2. 地區比對
     const address = shop.address || "";
-    let matchLocation = true;
-
     if (selectedCityName.value) {
       const matchCity = address.includes(selectedCityName.value);
-      if (!matchCity) {
-        matchLocation = false;
-      } else if (selectedDistricts.value.length > 0) {
+      if (!matchCity) return false;
+
+      if (selectedDistricts.value.length > 0) {
         const matchDistrict = selectedDistricts.value.some((dist) =>
           address.includes(dist)
         );
-        if (!matchDistrict) matchLocation = false;
+        if (!matchDistrict) return false;
       }
     }
 
-    return matchSearch && matchTags && matchReserve && matchLocation;
+    // 3. 可預約過濾
+    if (onlyReservable.value && !shop.canReserve) return false;
+
+    // 4. 一般自訂標籤過濾
+    const regularTags = selectedTags.value.filter((t) => !WEEKDAYS.includes(t));
+    if (regularTags.length > 0) {
+      const hasRegularTag = regularTags.some((t) => shop.tags && shop.tags.includes(t));
+      if (!hasRegularTag) return false;
+    }
+
+    // 5. 營業日單選過濾
+    const dayTags = selectedTags.value.filter((t) => WEEKDAYS.includes(t));
+    const selectedDay = dayTags.length > 0 ? dayTags[dayTags.length - 1] : null;
+
+    if (selectedDay) {
+      const isUnset = shop.hoursType === "unset" || !shop.businessHours;
+      const isIrregular = Boolean(shop.isIrregularHoliday);
+
+      if (isIrregular || isUnset) return true;
+
+      const isOpen = shop.businessHours?.[selectedDay]?.isOpen === true;
+      if (!isOpen) return false;
+    }
+
+    return true;
   });
 });
 

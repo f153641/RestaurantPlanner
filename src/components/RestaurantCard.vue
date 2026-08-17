@@ -28,9 +28,37 @@
       </div>
 
       <div class="card-meta">
-        <span v-if="restaurant.avgCost" class="avg-cost"
-          >💰 均消: ${{ restaurant.avgCost }} / 人</span
+        <span v-if="restaurant.avgCost" class="avg-cost">
+          💰 均消: ${{ restaurant.avgCost }} / 人
+        </span>
+
+        <!-- 🌟 新增：營業時間狀態提示標籤 -->
+        <div
+          v-if="
+            restaurant.isIrregularHoliday ||
+            restaurant.hoursType === 'unset' ||
+            !restaurant.businessHours
+          "
+          class="status-tags"
         >
+          <el-tag
+            v-if="restaurant.isIrregularHoliday"
+            size="small"
+            type="warning"
+            effect="plain"
+          >
+            ⚠️ 公休日不固定
+          </el-tag>
+          <el-tag
+            v-else-if="restaurant.hoursType === 'unset' || !restaurant.businessHours"
+            size="small"
+            type="info"
+            effect="plain"
+          >
+            ❓ 未設定營業時間
+          </el-tag>
+        </div>
+
         <div v-if="restaurant.tags && restaurant.tags.length" class="card-tags">
           <span v-for="(tag, i) in restaurant.tags" :key="i" class="tag">
             #{{ tag }}
@@ -253,5 +281,13 @@ const formattedRating = computed(() => {
   align-items: center;
   justify-content: flex-end; /* 讓星星與評分靠右對齊 */
   flex-shrink: 0; /* 避免被左側店名壓縮 */
+}
+
+.status-tags {
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+.mr-1 {
+  margin-right: 4px;
 }
 </style>

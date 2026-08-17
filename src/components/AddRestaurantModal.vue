@@ -58,11 +58,25 @@
 
         <el-divider />
 
-        <!-- 3. 營業時間 (依照 weekDaysList 強制進行排序) -->
+        <!-- 3. 營業時間 (支援不設定 / 設定開關 & 公休日不一定) -->
         <div class="form-section">
           <div class="section-title">⏰ 營業時間</div>
 
-          <div class="detailed-hours-box">
+          <!-- 🌟 開關區域：獨立一列並加大顯示 -->
+          <div class="hours-toggle-bar">
+            <span class="sub-label">營業時間設定：</span>
+            <el-radio-group v-model="form.hoursType" size="default">
+              <el-radio-button value="unset">不設定</el-radio-button>
+              <el-radio-button value="set">設定營業時間</el-radio-button>
+            </el-radio-group>
+          </div>
+
+          <!-- 設定模式下才顯示具體時段 -->
+          <div
+            v-if="form.hoursType === 'set'"
+            class="detailed-hours-box"
+            style="margin-top: 12px"
+          >
             <div v-for="dayName in weekDaysList" :key="dayName" class="day-row">
               <div class="day-check">
                 <el-checkbox
@@ -118,6 +132,11 @@
                 <span v-else class="closed-label">公休 / 休息</span>
               </div>
             </div>
+          </div>
+
+          <!-- 最下方：公休日不一定 -->
+          <div class="irregular-holiday-box" style="margin-top: 12px">
+            <el-checkbox v-model="form.isIrregularHoliday"> 公休日不一定 </el-checkbox>
           </div>
         </div>
 
@@ -260,21 +279,15 @@
 
     <template #footer>
       <div class="dialog-footer">
-        <!-- 情況 A：僅檢視模式 (isViewOnly = true) -->
         <template v-if="isViewOnly">
-          <!-- 🌟 只有當 showEditButton 為 true 時才顯示編輯按鈕 (RestaurantView 會傳入 true，ItineraryView 為 false) -->
           <el-button v-if="showEditButton" type="warning" @click="handleSwitchToEdit">
             編輯
           </el-button>
-
           <el-button @click="handleClose">關閉</el-button>
         </template>
 
-        <!-- 情況 B：編輯 / 新增模式 (isViewOnly = false) -->
         <template v-else>
-          <el-button type="primary" @click="handleSubmit">
-            {{ initialData ? "儲存" : "儲存" }}
-          </el-button>
+          <el-button type="primary" @click="handleSubmit"> 儲存 </el-button>
           <el-button @click="handleClose">取消</el-button>
         </template>
       </div>
@@ -303,11 +316,9 @@ const emit = defineEmits([
   "switch-to-edit",
   "add-new-tag",
   "delete-tag",
-  "update",
   "edit",
 ]);
 
-// 🌟 Modal 顯示狀態（與父元件雙向綁定）
 const visible = computed({
   get: () => props.modelValue,
   set: (val) => emit("update:modelValue", val),
@@ -322,7 +333,6 @@ const customTags = computed(() =>
   props.availableTags.filter((t) => !DEFAULT_PERIODS.includes(t))
 );
 
-// 定義標準星期順序
 const weekDaysList = [
   "星期一",
   "星期二",
@@ -348,6 +358,8 @@ const form = reactive({
   name: "",
   address: "",
   googleMapUrl: "",
+  hoursType: "unset", // 🌟 新增：'unset' (不設定) | 'set' (設定)
+  isIrregularHoliday: false, // 🌟 新增：公休日不一定
   businessHours: createDefaultHours(),
   tags: [],
   minCost: null,
@@ -371,6 +383,7 @@ watch(
     if (newData) {
       const parsedData = JSON.parse(JSON.stringify(newData));
       const baseHours = createDefaultHours();
+
       if (parsedData.businessHours) {
         weekDaysList.forEach((day) => {
           if (parsedData.businessHours[day]) {
@@ -380,18 +393,24 @@ watch(
       }
       parsedData.businessHours = baseHours;
 
-      Object.assign(form, parsedData);
+      Object.assign(form, {
+        hoursType: parsedData.hoursType || (parsedData.businessHours ? "set" : "unset"),
+        isIrregularHoliday: !!parsedData.isIrregularHoliday,
+        ...parsedData,
+      });
 
       if (newData.googleMapUrl) {
         inputUrl.value = newData.googleMapUrl;
       }
     } else {
-      // 重置表單
+      // 重置表單 (預設為不設定)
       Object.assign(form, {
         id: null,
         name: "",
         address: "",
         googleMapUrl: "",
+        hoursType: "unset",
+        isIrregularHoliday: false,
         businessHours: createDefaultHours(),
         tags: [],
         minCost: null,
@@ -547,35 +566,33 @@ const handleSubmit = () => {
   if (!form.name) return ElMessage.warning("請填寫餐廳名稱！");
   if (!form.address) return ElMessage.warning("請填寫正確的餐廳地址！");
 
-  const hasMin = form.minCost !== "" && form.minCost !== null;
-  const hasMax = form.maxCost !== "" && form.maxCost !== null;
-  if (hasMin && hasMax && Number(form.maxCost) < Number(form.minCost)) {
-    return ElMessage.warning("最高消費不能小於最低消費喔！");
+  let cleanedHours = null;
+
+  // 只有在 hoursType 為 'set' 時才寫入詳細營業日
+  if (form.hoursType === "set") {
+    cleanedHours = {};
+    weekDaysList.forEach((day) => {
+      const data = form.businessHours[day];
+      if (data && data.isOpen) {
+        const validSlots = data.slots.filter((s) => s.openTime || s.closeTime);
+        cleanedHours[day] = {
+          isOpen: true,
+          slots:
+            validSlots.length > 0
+              ? validSlots
+              : [{ openTime: "11:00", closeTime: "21:00" }],
+        };
+      } else {
+        cleanedHours[day] = { isOpen: false, slots: [] };
+      }
+    });
   }
-
-  let cleanedHours = {};
-  let hasAnyOpenDay = false;
-
-  weekDaysList.forEach((day) => {
-    const data = form.businessHours[day];
-    if (data && data.isOpen) {
-      const validSlots = data.slots.filter((s) => s.openTime || s.closeTime);
-      if (validSlots.length > 0) {
-        hasAnyOpenDay = true;
-        cleanedHours[day] = { isOpen: true, slots: validSlots };
-      } else cleanedHours[day] = { isOpen: false, slots: [] };
-    } else cleanedHours[day] = { isOpen: false, slots: [] };
-  });
 
   const payload = {
     ...form,
-    businessHours: hasAnyOpenDay ? cleanedHours : null,
-    minCost: hasMin ? Number(form.minCost) : null,
-    maxCost: hasMax ? Number(form.maxCost) : null,
-    rating: form.rating ? Number(form.rating) : null,
-    canReserve: form.canReserve,
-    reserveType: form.canReserve ? form.reserveType : null,
-    phone: form.canReserve && form.reserveType === "phone" ? form.phone : null,
+    hoursType: form.hoursType, // 'set' 或 'unset'
+    isIrregularHoliday: Boolean(form.isIrregularHoliday),
+    businessHours: cleanedHours,
   };
 
   if (props.initialData) {
@@ -586,7 +603,6 @@ const handleSubmit = () => {
   handleClose();
 };
 
-// 🌟 點擊「編輯餐廳」按鈕時觸發，通知父組件將 isViewOnly 改為 false
 const handleSwitchToEdit = () => {
   emit("switch-to-edit");
   emit("edit");
@@ -617,6 +633,12 @@ const handleSwitchToEdit = () => {
   font-weight: bold;
   color: #1e293b;
   margin-bottom: 12px;
+}
+
+.hours-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .help-text {

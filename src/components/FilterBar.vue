@@ -133,7 +133,6 @@
           placeholder="搜尋餐廳名稱或地址..."
           clearable
           size="default"
-          prefix-icon="Search"
           @input="(val) => emit('update:searchQuery', val)"
         />
       </div>
@@ -285,7 +284,15 @@ const activeCollapse = ref([]);
 
 // 預設時段與星期常量
 const DEFAULT_PERIODS = ["早餐", "午餐", "晚餐", "下午茶/點心", "宵夜"];
-const WEEKDAY_TAGS = ["一", "二", "三", "四", "五", "六", "日", "不一定"];
+const WEEKDAY_TAGS = [
+  "星期一",
+  "星期二",
+  "星期三",
+  "星期四",
+  "星期五",
+  "星期六",
+  "星期日",
+];
 
 const periodTags = computed(() =>
   (props.availableTags || []).filter((t) => DEFAULT_PERIODS.includes(t))
@@ -386,10 +393,28 @@ const clearCategory = (categoryTags) => {
   emit("update:selectedTags", newTags);
 };
 
+const WEEKDAYS = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"];
+
 const toggleTag = (tag) => {
-  let tags = [...props.selectedTags];
-  tags.includes(tag) ? (tags = tags.filter((t) => t !== tag)) : tags.push(tag);
-  emit("update:selectedTags", tags);
+  const isWeekday = WEEKDAYS.includes(tag);
+
+  if (isWeekday) {
+    // 1. 🌟 將 selectedTags.value 改為 props.selectedTags
+    const nonWeekdayTags = props.selectedTags.filter((t) => !WEEKDAYS.includes(t));
+
+    // 2. 若原本已選取該星期則取消選取，否則替換為最新的單一星期
+    if (props.selectedTags.includes(tag)) {
+      emit("update:selectedTags", nonWeekdayTags);
+    } else {
+      emit("update:selectedTags", [...nonWeekdayTags, tag]);
+    }
+  } else {
+    // 3. 一般分類標籤維持多選，同樣使用 props.selectedTags
+    const newTags = props.selectedTags.includes(tag)
+      ? props.selectedTags.filter((t) => t !== tag)
+      : [...props.selectedTags, tag];
+    emit("update:selectedTags", newTags);
+  }
 };
 </script>
 
