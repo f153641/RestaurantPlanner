@@ -98,9 +98,11 @@ onMounted(() => {
   unsubscribeRestaurants = onSnapshot(qRestaurants, (querySnapshot) => {
     const tempShops = [];
     querySnapshot.forEach((doc) => {
-      tempShops.push({ id: doc.id, ...doc.data() });
+      tempShops.push({ ...doc.data(), id: doc.id });
     });
     restaurants.value = tempShops;
+
+    console.log("📡 Firebase 原始餐廳資料:", JSON.parse(JSON.stringify(tempShops)));
   });
 
   // 📡 監聽自訂標籤資料
@@ -111,6 +113,7 @@ onMounted(() => {
       tempTags.push({
         id: doc.id,
         name: doc.data().name,
+        id: doc.id,
       });
     });
     firebaseCustomTags.value = tempTags;
@@ -158,7 +161,9 @@ const closeModal = () => {
 // ➕ 功能：將新餐廳推送到雲端資料庫
 const addRestaurant = async (newShop) => {
   try {
-    await addDoc(collection(db, "restaurants"), newShop);
+    const shopData = { ...newShop };
+    delete shopData.id; // 🌟 移除前端預設的 id 欄位，交給 Firebase 自動生成
+    await addDoc(collection(db, "restaurants"), shopData);
     closeModal();
   } catch (error) {
     console.error("雲端新增失敗:", error);
@@ -186,6 +191,12 @@ const updateRestaurant = async (updatedShop) => {
 
 // 🗑️ 功能：從雲端資料庫刪除餐廳
 const deleteRestaurant = async (id) => {
+  // 🌟 補上防呆：如果 id 為空，直接擋掉並印出警示
+  if (!id) {
+    console.warn("無法刪除：找不到餐廳 ID", id);
+    return;
+  }
+
   if (confirm("確定要從雲端同步刪除這家餐廳嗎？")) {
     try {
       await deleteDoc(doc(db, "restaurants", id));

@@ -48,6 +48,7 @@
         target="_blank"
         class="address-link"
         title="點擊開啟 Google 地圖"
+        @click.stop
       >
         📍 {{ restaurant.address }}
       </a>
