@@ -260,16 +260,22 @@
 
     <template #footer>
       <div class="dialog-footer">
+        <!-- 情況 A：僅檢視模式 (isViewOnly = true) -->
         <template v-if="isViewOnly">
-          <!-- 🌟 在檢視模式下只顯示關閉按鈕，隱藏編輯按鈕 -->
+          <!-- 🌟 只有當 showEditButton 為 true 時才顯示編輯按鈕 (RestaurantView 會傳入 true，ItineraryView 為 false) -->
+          <el-button v-if="showEditButton" type="warning" @click="handleSwitchToEdit">
+            編輯
+          </el-button>
+
           <el-button @click="handleClose">關閉</el-button>
         </template>
 
+        <!-- 情況 B：編輯 / 新增模式 (isViewOnly = false) -->
         <template v-else>
-          <el-button @click="handleClose">取消</el-button>
           <el-button type="primary" @click="handleSubmit">
-            {{ initialData ? "儲存變更" : "確認新增餐廳" }}
+            {{ initialData ? "儲存" : "儲存" }}
           </el-button>
+          <el-button @click="handleClose">取消</el-button>
         </template>
       </div>
     </template>
@@ -286,6 +292,7 @@ const props = defineProps({
   availableTags: { type: Array, default: () => [] },
   initialData: { type: Object, default: null },
   isViewOnly: { type: Boolean, default: false },
+  showEditButton: { type: Boolean, default: true },
 });
 
 const emit = defineEmits([
@@ -296,6 +303,8 @@ const emit = defineEmits([
   "switch-to-edit",
   "add-new-tag",
   "delete-tag",
+  "update",
+  "edit",
 ]);
 
 // 🌟 Modal 顯示狀態（與父元件雙向綁定）
@@ -575,6 +584,12 @@ const handleSubmit = () => {
     emit("add", payload);
   }
   handleClose();
+};
+
+// 🌟 點擊「編輯餐廳」按鈕時觸發，通知父組件將 isViewOnly 改為 false
+const handleSwitchToEdit = () => {
+  emit("switch-to-edit");
+  emit("edit");
 };
 </script>
 

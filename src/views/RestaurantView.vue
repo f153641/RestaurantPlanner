@@ -34,12 +34,14 @@
       :available-tags="availableTags"
       :initial-data="currentRestaurant"
       :is-view-only="isViewOnly"
+      :show-edit-button="true"
       @close="closeModal"
       @add="addRestaurant"
       @update="updateRestaurant"
       @switch-to-edit="isViewOnly = false"
       @add-new-tag="addNewTag"
       @delete-tag="deleteTag"
+      @edit="handleEdit"
     />
   </div>
 </template>

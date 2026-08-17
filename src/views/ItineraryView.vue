@@ -245,6 +245,7 @@
       :initial-data="selectedRestaurant"
       :available-tags="[]"
       :is-view-only="true"
+      :show-edit-button="false"
     />
   </div>
 </template>
